@@ -50,12 +50,8 @@ class Route implements RouteInterface {
     /**
      * {@inheritdoc}
      */
-    public function execute(\Yeah\Fw\Http\Request $request, \Yeah\Fw\Http\Response $response, \SessionHandlerInterface $session, \Yeah\Fw\Auth\AuthInterface $auth) {
+    public function execute() {
         $method = $this->getAction();
-        $this->getController()->setRequest($request);
-        $this->getController()->setResponse($response);
-        $this->getController()->setAuth($auth);
-        $this->getController()->setSessionHandler($session);
         return $this->getController()->execute($method, $this->params);
     }
 

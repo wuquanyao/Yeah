@@ -71,9 +71,11 @@ class App {
         $this->env = $env;
         require_once 'Config.php';
         $conf = array();
+
         if(isset($config[$env])) {
             $conf = $config[$env];
         }
+
         $this->config = new Config($conf);
 
         if(PHP_MAJOR_VERSION == 7) {
@@ -85,7 +87,7 @@ class App {
         $this->router = new \Yeah\Fw\Routing\Router();
         $this->request = new \Yeah\Fw\Http\Request();
         $this->response = new \Yeah\Fw\Http\Response();
-        $this->dc = new DependencyContainer();
+        $this->dc = new \Yeah\Fw\DependencyInjection\Container();
         $this->configureMiddleware();
         $this->configureServices();
         $this->loadRoutes();
@@ -167,9 +169,11 @@ class App {
         $this->executeSecurity();
         $this->executeMiddleware(\Yeah\Fw\Middleware\Slots::POST_SECURITY);
         $this->executeMiddleware(\Yeah\Fw\Middleware\Slots::PRE_CACHE);
+
         if($this->route->getIsCacheable() && $this->executeCache($this->route)) {
             return;
         }
+
         $this->executeMiddleware(\Yeah\Fw\Middleware\Slots::POST_CACHE);
         $this->executeMiddleware(\Yeah\Fw\Middleware\Slots::PRE_ACTION);
         $action_result = $this->executeAction($this->route);
@@ -186,6 +190,7 @@ class App {
      */
     public function executeMiddleware($slot) {
         $collection = $this->middleware[$slot];
+
         foreach ($collection as $middleware) {
             if($middleware instanceof \Closure) {
                 call_user_func_array($middleware);
@@ -229,9 +234,7 @@ class App {
      * @return \\Yeah\\Fw\\Mvc\\View Controller view object
      */
     private function executeAction(\Yeah\Fw\Routing\Route\RouteInterface $route) {
-        return $route->execute(
-                        $this->getRequest(), $this->getResponse(), $this->getSession(), $this->getAuth()
-        );
+        return $route->execute($this->getRequest(), $this->getResponse(), $this->getSession(), $this->getAuth());
     }
 
     /**
@@ -244,11 +247,14 @@ class App {
         if(!$route->getIsCacheable()) {
             return false;
         }
+
         $response_cache = $this->getResponseCache();
+
         if($response_cache->has($this->getUrlCacheKey())) {
             $this->response->write($response_cache->get($this->getUrlCacheKey()));
             return true;
         }
+
         return false;
     }
 
@@ -263,9 +269,11 @@ class App {
             $output = $response->render();
             $this->response->write($output);
         }
+
         if(is_array($response)) {
             $layout = isset($response['layout']) ? $response['layout'] : 'default';
-            $template = isset($response['template']) ? $response['template'] : ($this->request->getParameter('action') ? $this->request->getParameter('action') : 'index');
+            $template = isset($response['template']) ? $response['template'] : ($this->request->getParameter('action') ? $this->request->getParameter('action') : 
+                        'index');
             $output = $this->getView()
                     ->setTemplate($template)
                     ->withLayout($layout)
@@ -273,10 +281,13 @@ class App {
                     ->render();
             $this->response->write($output);
         }
+
         $this->executeMiddleware(\Yeah\Fw\Middleware\Slots::PRE_REPONSE_CACHE);
+
         if($this->route->getIsCacheable()) {
             $this->getResponseCache()->set($this->getUrlCacheKey(), $output, $this->route->getCacheDuration());
         }
+
         $this->executeMiddleware(\Yeah\Fw\Middleware\Slots::POST_REPONSE_CACHE);
     }
 
@@ -380,6 +391,7 @@ class App {
         if($this->config->base_dir) {
             return $this->config->base_dir;
         }
+
         return dirname(__FILE__) . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '..';
     }
 
@@ -407,6 +419,7 @@ class App {
         if($this->config->web_dir) {
             return $this->config->web_dir;
         }
+
         return $this->getBaseDir() . DIRECTORY_SEPARATOR . 'web';
     }
 
@@ -420,6 +433,7 @@ class App {
         if($this->config->cache_dir) {
             return $this->config->cache_dir;
         }
+
         return $this->getBaseDir() . DIRECTORY_SEPARATOR . 'cache';
     }
 
@@ -433,6 +447,7 @@ class App {
         if($this->config->log_dir) {
             return $this->config->log_dir;
         }
+
         return $this->getBaseDir() . DIRECTORY_SEPARATOR . 'log';
     }
 
@@ -446,6 +461,7 @@ class App {
         if($this->config->controllers_dir) {
             return $this->config->controllers_dir;
         }
+
         return $this->getBaseDir() . DIRECTORY_SEPARATOR . $this->getAppName() . DIRECTORY_SEPARATOR . 'controllers';
     }
 
@@ -459,6 +475,7 @@ class App {
         if($this->config->models_dir) {
             return $this->config->models_dir;
         }
+
         return $this->getBaseDir() . DIRECTORY_SEPARATOR . $this->getAppName() . DIRECTORY_SEPARATOR . 'models';
     }
 
@@ -472,6 +489,7 @@ class App {
         if($this->config->views_dir) {
             return $this->config->views_dir;
         }
+
         return $this->getBaseDir() . DIRECTORY_SEPARATOR . $this->getAppName() . DIRECTORY_SEPARATOR . 'views';
     }
 
@@ -489,6 +507,7 @@ class App {
      */
     public function route($url, $method, $http_method = 'GET', $secure = false, $cache_options = array('is_cacheable' => false, 'cache_duration' => 1440)) {
         $route = \Yeah\Fw\Routing\Router::get($url);
+
         if($route) {
             $route['restful'][$http_method] = array(
                 'method' => $method,
@@ -498,6 +517,7 @@ class App {
             \Yeah\Fw\Routing\Router::add($url, $route);
             return;
         }
+        
         \Yeah\Fw\Routing\Router::add($url, array(
             'route_request_handler' => 'Yeah\Fw\Routing\RouteRequest\SimpleRouteRequestHandler',
             'secure' => $secure,
@@ -621,35 +641,16 @@ class App {
     public function configureServices() {
         $dc = $this->getDependencyContainer();
 
-        $dc->set('logger', function() {
-            return new \Yeah\Fw\Logger\NullLogger();
-        });
+        $service_config_path = $this->getBaseDir() . DIRECTORY_SEPARATOR . $this->getAppName() . DIRECTORY_SEPARATOR . 'config' .  DIRECTORY_SEPARATOR . 
+                               'services.php';
 
-        $dc->set('db_config', function() {
-            return null;
-        });
+        if(file_exists($service_config_path)) {
+            $services_config = require_once $service_config_path;
+        }
 
-        $dc->set('session', function() {
-            return new \Yeah\Fw\Session\NullSessionHandler();
-        });
-
-        $dc->set('auth', function() {
-            return new \Yeah\Fw\Auth\NullAuth();
-        });
-
-        $dc->set('entity_manager', function() {
-            return null;
-        });
-
-        $dc->set('view', function() {
-            return new \Yeah\Fw\Mvc\PhpView(App::getInstance()->getViewsDir(), array(
-                'cache' => $this->getCacheDir()
-            ));
-        });
-
-        $dc->set('response_cache', function () {
-            return \Yeah\Fw\Cache\CacheFactory::create();
-        });
+        foreach($services_config as $record) {
+            $dc->register($record);
+        }
     }
 
     /**
